@@ -1,0 +1,71 @@
+require 'monitor'
+require 'algorithms'
+
+
+# we assume one shared Cache among all connections
+# hence we use instance variables rather than
+# explicit class locking
+class Cache
+  # size is specified in bytes
+  # policy is a string
+  def initialize(arg_size, arg_policy = 'LRU')
+    if not arg_size.instance_of(Int) or arg_size <= 0
+      raise TypeError, 'We need the cache size to be a positive integer.'
+    end
+    if not arg_policy.instance_of(String)
+      raise TypeError, 'We need the policy to be a string.'
+    end
+    if not arg_policy == 'LRU'
+      raise ArgumentError, 'Sorry only LRU is currently implemented.'
+    end
+
+    @limit = arg_size
+    @current_size = 0
+    @policy = arg_policy
+
+    # we use a priorityqueue implemented as a fibonacci heap
+    # from the algorithms gem. Unfortunately it doesn't have
+    # an amortized constant time decrease/increase
+    # priority operation so we incur a log n penalty there
+    @buf = Containers::PriorityQueue.new
+    @inCache = Hash.new
+    @buf.extend(MonitorMixin)
+    @inCache.extend(MonitorMixin)
+    @commit_lock = buf.new_cond # to be used later
+  end
+
+  # co_object is the cache object
+  # co_size is the cache object size
+  def write(co_object, co_size)
+    @buf.synchronize do
+        @inCache.synchronize do
+            if not co_size.instance_of(Int) and (co_size <= 0)
+              raise TypeError, 'The size of the object you are trying to write' \
+                               ' must be a positive integer.'
+            end
+    
+            # check if we need to evict
+            cache_with_object = co_size + @current_size
+            if cache_with_object > @limit
+              # TODO: This should probably be changed
+              # i'm guessing that it would just pass through the object?
+              # or does it need to stream or ....? How would we keep a e.g.
+              # 8gb video file in memory before committing?
+              if co_size > @limit
+                raise ArgumentError, 'We cannot fit this element in our cache '
+              end
+    
+              #otherwise we can fit in the cache
+              while cache_with_object > @limit
+                @buf.pop
+              end
+    
+            end
+        end
+    end
+
+
+
+end
+
+
