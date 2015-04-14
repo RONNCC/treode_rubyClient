@@ -1,8 +1,9 @@
 class CacheResult
     attr_accessor :value_time, :cached_time, :value
+    supported_values = ['JSON'] #extend to xml later?
     
     def initialize(value_time,cached_time, value)
-        supported_values = ['JSON'] #extend to xml later?
+        
         if not value_time.is_a?(TxClock)
             raise TypeError, 'The Value Time has to be a TxClock'
         end

@@ -34,6 +34,53 @@ class DoublyLinkedList
             return @end
         end
     end
+
+    def pop_tail
+        if @root.nil?
+            raise IndexError, 'There are no elements to pop from tail'
+        else
+            @len -= 1
+            if @len == 1
+                tmp = @root
+                @root = nil
+                @end = nil
+                return tmp
+            else
+                tmp = @end
+                @end = @end.prev_node
+                @end.next_node = nil
+                return tmp
+            end
+        end
+    end
+
+
+    def pop_head
+        if @root.nil?
+            raise IndexError, 'There are no elements to pop from head'
+        else
+            @len -= 1
+            if @len == 1
+                tmp = @root
+                @root = nil
+                @end = nil
+                return tmp
+            else
+                tmp = @root
+                @root = @root.next_node
+                @root.prev_node = nil
+                return tmp
+            end
+        end
+    end
+
+    def peek_head
+        @root
+    end
+
+    def peek_tail
+        @end
+    end
     
     def to_s
         output = '['
