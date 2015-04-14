@@ -1,4 +1,4 @@
-
+require_relative './DLL'
 require 'monitor'
 require 'algorithms'
 
@@ -23,26 +23,20 @@ require 'algorithms'
 class Cache
   # size is specified in bytes
   # policy is a string
-  def initialize(arg_size, arg_policy = 'LRU')
+  def initialize(arg_size)
     if not arg_size.is_a?(Fixnum) or arg_size <= 0
-      raise TypeError, 'We need the cache size to be a positive integer.'
-    end
-    if not arg_policy.is_a?(String)
-      raise TypeError, 'We need the policy to be a string.'
-    end
-    if not arg_policy == 'LRU'
-      raise ArgumentError, 'Sorry only LRU is currently implemented.'
+      raise TypeError, 'We need the cache limit to be a positive integer.'
     end
 
     @limit = arg_size
     @current_size = 0
-    @policy = arg_policy
+
 
     # we use a doubly linked list & hash table as a priorityQueue here
     # since the provided priorityQueue lacks
     # many accessors methods from it's Java peer
     @in_cache = Hash.new # a hashtable of {(cache object, object size, object_value)}
-    @bufPQ = Array.new # we use this as a LRU Doubly Linked List.
+    @bufPQ = DoublyLinkedList.new # we use this as a LRU Doubly Linked List.
     # The oldest are at the front and the newest are at the end
     @in_cache.extend(MonitorMixin)
     @bufPQ.extend(MonitorMixin)
@@ -60,7 +54,6 @@ class Cache
                                ' must be a positive integer.'
             end
     
-
             if @in_cache.has_key?(co_object)
                 if co_size > @limit
                     raise ArgumentError, 'Updated value cannot be fit in our cache '
