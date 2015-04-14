@@ -58,12 +58,21 @@ class Cache
   end
 
 
-  def write()
+  def write(condition_time, op_list)
+    #type checking
+    raise TypeError, "Condition_Time needs to be a TxClock", unless condition_time.is_a?(TxClock)
+    raise TypeError, "Op_list needs to be a TxView", unless op_list.is_a?(TxView)
+
+
    
   end
   
-  def read()
-     
+  def read(read_time: TxClock, table: String, key: String, max_age: int, no_cache: bool)
+    raise TypeError, "Read_Time needs to be a TxClock", unless read_time
+    raise TypeError, table
+    raise TypeError, key
+    raise TypeError, max_age
+    raise TypeError, no_cache
   end
       
 
