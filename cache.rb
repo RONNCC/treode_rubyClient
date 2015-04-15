@@ -62,10 +62,12 @@ class Cache
     #type checking
     raise TypeError, "Condition_Time needs to be a TxClock", unless condition_time.is_a?(TxClock)
     raise TypeError, "Op_list needs to be a TxView", unless op_list.is_a?(TxView)
-   
 
     @in_cache.synchronize do
       @bufDLL.synchronize do
+
+        
+
       end
     end
 
