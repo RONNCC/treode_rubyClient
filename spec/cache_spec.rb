@@ -4,7 +4,11 @@ require 'pp'
 describe Cache do
         describe "a default cache " do
               before do
-                @cache = Cache.new(10)
+                server = 'https://treode_testing_server.com/'
+                port=80
+                max_age = nil
+                no_cache = false
+                @cache =  Cache.new(server, port , max_age, no_cache)
               end
              
               it "should have a default LRU Policy" do
@@ -22,7 +26,11 @@ describe Cache do
         
         describe "a cache with one object  " do
               before do
-                @cache = Cache.new(10)
+                server = 'https://treode_testing_server.com/'
+                port=80
+                max_age = nil
+                no_cache = false
+                @cache =  Cache.new(server, port , max_age, no_cache)
                 @cache.write("a", "dinosaur", 5)
               end
              
@@ -57,7 +65,11 @@ describe Cache do
         
         describe "a cache with objects falling out of cache" do
               before do
-                @cache = Cache.new(10)
+                server = 'https://treode_testing_server.com/'
+                port=80
+                max_age = nil
+                no_cache = false
+                @cache =  Cache.new(server, port , max_age, no_cache)
                 @cache.write("a", "lorem", 3)
                 @cache.write("b", "ipsum", 4)
                 @cache.write("c", "delor", 5)
@@ -96,7 +108,11 @@ describe Cache do
         
         describe "a cache should be safe for multithreaded writes" do
             before do
-                @cache = Cache.new(30)
+                server = 'https://treode_testing_server.com/'
+                port=80
+                max_age = nil
+                no_cache = false
+                @cache =  Cache.new(server, port , max_age, no_cache)
             end
             
             it "should maintain its size " do

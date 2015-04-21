@@ -66,7 +66,7 @@ class Cache
     @in_cache.synchronize do
       @bufDLL.synchronize do
 
-        
+      nil
 
       end
     end
@@ -91,8 +91,8 @@ class Cache
           read_from_db = @connection.GET_Request()
           params = Hash.new()
           max_age = [max_age, @max_age] #TODO: add the 2 from the transaction read method here
-          no_cache = 
-          params['Cache-Control:' = "max-age:#{max_age}, #{'no-cache' if no_cache}"]
+          no_cache = true
+          params['Cache-Control:'] =  "max-age:#{max_age}, #{'no-cache' if no_cache}"
           case read_from_db.code
           when 200
             put(read_from_db['Read-TxClock'], read_from_db['Value-TxClock'], table, key, read_from_db.body)
@@ -153,9 +153,9 @@ class Cache
 
         # else we need to add a new tuple
         @in_cache[[table,key]].insert_tail [value_time, cached_time, value]
-
       end
     end
   end
+
 end
 
