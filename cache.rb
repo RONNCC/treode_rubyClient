@@ -1,12 +1,14 @@
 require_relative './DLL'
 require_relative './TxClock'
+require_relative './HTTPInterface'
 require 'monitor'
 require 'algorithms'
+require 'json'
 
 
 # current behavior is not as expected for repeats of a value
 # as we require the cache_object to be unique - otherwise we don't have
-# a unique index 
+# a unique index
 
 # right now if you try to add "a" and "a" is already in it, it will do nothing
 # as expected
@@ -25,7 +27,7 @@ class Cache
   attr_accessor :server, :port, :max_age, :no_cache
   # server args
   def initialize(server, port=80, max_age=nil, no_cache=False)
-      
+
     #check param types
     if not server.is_a?(String)
       raise TypeError, 'Server needs to be a string e.g. www.example.com'
@@ -39,13 +41,13 @@ class Cache
     if not no_cache.is_a?(TrueClass) || no_cache.is_a?(FalseClass)
       raise TypeError, 'The no_cache setting must be a boolean'
     end
-    
+
     @connection = HTTPInterface.new(server, port)
     @server = server
     @port = port
     @max_age = max_age
     @no_cache = no_cache
-    
+
     # we use a doubly linked list & hash table as a priorityQueue here
     # since the provided priorityQueue lacks
     # many accessors methods from it's Java peer
@@ -58,21 +60,44 @@ class Cache
     #@in_cache_commit_lock = @bufPQ.new_cond # to be used later
   end
 
-  def write(condition_time, op_list)
+  def write(condition_txclock, ops_map)
+    raise TypeError, "Condition_Time needs to be a TxClock" unless (condition_txclock.nil? or condition_txclock.is_a?(TxClock))
+    op_list = ops_map.keys.map{|k| {"table"=>k[0], "key"=>k[1], "op"=>ops_map[k][0], "value"=>ops_map[k][1] } }
+    batch_write(op_list, condition_txclock = condition_txclock)
+  end
+
+
+  def batch_write(op_list, unmodified_since = nil, transaction_id = nil, condition_txclock = nil)
     #type checking
-    raise TypeError, "Condition_Time needs to be a TxClock", unless condition_time.is_a?(TxClock)
-    raise TypeError, "Op_list needs to be a TxView", unless op_list.is_a?(TxView)
+
+    raise TypeError, "Condition_Time needs to be a TxClock" unless (condition_txclock.nil? or condition_txclock.is_a?(TxClock))
+    raise TypeError, "Unmodified_since needs to be a DateTime" unless (unmodified_since.nil? or unmodified_since.is_a?(DateTime))
 
     @in_cache.synchronize do
       @bufDLL.synchronize do
 
-      nil
+        json_body = op_list.to_json
+        params = Hash.new()
+        params['Content-Type'] =  'text/json'
+        if not unmodified_since.nil?
+          params['If-Unmodified-Since']= unmodified_since.strftime("%a, %e %B %Y %H:%M:%S  %Z")
+        end
+
+        if not transaction_id.nil?
+          params['Transaction:'] = "id=#{transaction_id}"
+        end
+
+        if not condition_txclock.nil?
+          params['Condition-TxClock'] = condition_txclock.to_str
+        end
+
+        @connection.PUT_Request(path, params, json_body)
 
       end
     end
 
   end
-  
+
   def read(read_time, table, key, max_age, no_cache)
     #type checking
     raise TypeError, "read_time needs to be a " unless read_time.is_a?(TxClock)
@@ -101,12 +126,13 @@ class Cache
           else
             raise TypeError, 'Error: Wrong Status Code Returned'
           end
+        end
       end
-    end
 
+    end
   end
 
-  
+
   #returns the most recent value if it exists, else returns nil
   def get(read_time, table, key)
     #type checking
@@ -121,18 +147,18 @@ class Cache
         bucket_entries.peek_tail()
       end
     end
-  end    
+  end
 
 
-  # returns nil no matter what 
+  # returns nil no matter what
   def put(read_time, value_time, table, key, value)
-    #type checking 
+    #type checking
     raise TypeError, "read_time needs to be a " unless read_time.is_a?(TxClock)
     raise TypeError, 'The Value Time has to be a TxClock' unless value_time.is_a?(TxClock)
     raise TypeError, "table needs to be a " unless table.is_a?(String)
     raise TypeError, "key needs to be a " unless  key.is_a?(String)
-    raise TypeError, 'Value needs to be a supported return type included in ' + 
-          CacheResult.supported_values unless CacheResult.supported_values.incude?(value)
+    raise TypeError, 'Value needs to be a supported return type included in ' +
+      CacheResult.supported_values unless CacheResult.supported_values.incude?(value)
 
     @in_cache.synchronize do
       @bufDLL.synchronize do
@@ -143,7 +169,7 @@ class Cache
         end
 
         bucket_end = bucket_entries.peek_tail()
-        while bucket_end != nil 
+        while bucket_end != nil
           if bucket_end.value[0] == value_time
             bucket_end.value[1] = [read_time, bucket_end.value[1]].max
             return
@@ -157,5 +183,8 @@ class Cache
     end
   end
 
-end
+  def get_op(op_string)
+    raise TypeError, 'Operation is not a valid operation' unless ['create','hold','update','delete'].include?(op_string)
+  end
 
+end
