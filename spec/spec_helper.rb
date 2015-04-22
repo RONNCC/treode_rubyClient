@@ -45,8 +45,8 @@ RSpec.configure do |config|
     mocks.verify_partial_doubles = true
   end
 
-# The settings below are suggested to provide a good initial experience
-# with RSpec, but feel free to customize to your heart's content.
+  # The settings below are suggested to provide a good initial experience
+  # with RSpec, but feel free to customize to your heart's content.
 =begin
   # These two settings work together to allow you to limit a spec run
   # to individual examples or groups you care about by tagging them with
@@ -94,8 +94,8 @@ RSpec.configure do |config|
   Kernel.srand config.seed
 =end
 
-  config.before(:each) do 
-    stub_request(:get, /api.github.com/).
+  config.before(:each) do
+    stub_request(:get, /treode.testing.server.com/).
       with(headers: {'Accept'=>'*/*', 'User-Agent'=>'Ruby'}).
       to_return(status: 200, body: "stubbed response", headers: {})
   end

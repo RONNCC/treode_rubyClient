@@ -29,18 +29,10 @@ class Cache
   def initialize(server, port=80, max_age=nil, no_cache=False)
 
     #check param types
-    if not server.is_a?(String)
-      raise TypeError, 'Server needs to be a string e.g. www.example.com'
-    end
-    if not port.is_a?(Integer)
-      raise TypeError, 'Port needs to be an integer'
-    end
-    if not max_age.is_a?(Integer)
-      raise TypeError, 'The Max Age of a cache object needs to be an integer'
-    end
-    if not no_cache.is_a?(TrueClass) || no_cache.is_a?(FalseClass)
-      raise TypeError, 'The no_cache setting must be a boolean'
-    end
+    raise TypeError, 'Server needs to be a string e.g. www.example.com' unless server.is_a?(String)
+    raise TypeError, 'Port needs to be an integer' unless port.is_a?(Integer)
+    raise TypeError, 'The Max Age of a cache object needs to be an integer' unless max_age.nil? or max_age.is_a?(Integer)
+    raise TypeError, 'The no_cache setting must be a boolean' unless no_cache.nil? or (no_cache.is_a?(TrueClass) || no_cache.is_a?(FalseClass))
 
     @connection = HTTPInterface.new(server, port)
     @server = server

@@ -11,12 +11,12 @@ class HTTPInterface
 
   # parse the codes from the return values
   # and do some validation and type conversion
-  def parseHTTP(HTTP_Obj)
+  def parseHTTP(http_obj)
     status_codes = ["200", "304", "305", "404", "412"] # 304 and 305 seem to both be Not Modified Status Codes
-    raise TypeError, 'Return Body must have a valid status Code', unless status_codes.include?(HTTP_Obj.code)
-    raise TypeError, 'Return Body must have a Date' unless HTTP_Obj.has_key?('Date')
-    raise TypeError, 'Return Body must have a Last-Modified' unless HTTP_Obj.has_key?('Last-Modified')
-    raise TypeError, 'Return Body must have a Value-TxClock' unless HTTP_Obj.has_key?('Value-TxClock')
+    raise TypeError, 'Return Body must have a valid status Code', unless status_codes.include?(http_obj.code)
+    raise TypeError, 'Return Body must have a Date' unless http_obj.has_key?('Date')
+    raise TypeError, 'Return Body must have a Last-Modified' unless http_obj.has_key?('Last-Modified')
+    raise TypeError, 'Return Body must have a Value-TxClock' unless http_obj.has_key?('Value-TxClock')
     parsed_object = return_body.to_hash
     #convert fields to the correct datatypes
     if parsed_object.has_key?('Read-TxClock')
@@ -24,7 +24,7 @@ class HTTPInterface
     end
     parsed_object['Value-TxClock'] = parsed_object['Value-TxClock'].to_i
     parsed_object.code = parsed_object.code.to_i
-    return parsed_object
+    parsed_object
   end
 
   def GET_Request(path, params)
@@ -54,4 +54,5 @@ class HTTPInterface
   end
 
 
+end
 end
