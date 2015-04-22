@@ -9,6 +9,8 @@ class HTTPInterface
   end
 
 
+  # parse the codes from the return values
+  # and do some validation and type conversion
   def parseHTTP(HTTP_Obj)
     status_codes = ["200", "304", "305", "404", "412"] # 304 and 305 seem to both be Not Modified Status Codes
     raise TypeError, 'Return Body must have a valid status Code', unless status_codes.include?(HTTP_Obj.code)
