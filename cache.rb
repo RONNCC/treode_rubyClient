@@ -24,7 +24,7 @@ require 'json'
 # =>            and update it in the LRU cache
 
 class Cache
-  attr_accessor :server, :port, :max_age, :no_cache
+  attr_accessor :server, :port, :max_age, :no_cache, :connection
   # server args
   def initialize(server, port=80, max_age=nil, no_cache=False)
 
@@ -33,150 +33,58 @@ class Cache
     raise TypeError, 'Port needs to be an integer' unless port.is_a?(Integer)
     raise TypeError, 'The Max Age of a cache object needs to be an integer' unless max_age.nil? or max_age.is_a?(Integer)
     raise TypeError, 'The no_cache setting must be a boolean' unless no_cache.nil? or (no_cache.is_a?(TrueClass) || no_cache.is_a?(FalseClass))
-
-    @connection = HTTPInterface.new(server, port)
+    
+    
+    @cache_map = CacheMap.new
+    @http_facade = HTTPFacade.new(server, port)
+    
     @server = server
     @port = port
     @max_age = max_age
     @no_cache = no_cache
 
-    # we use a doubly linked list & hash table as a priorityQueue here
-    # since the provided priorityQueue lacks
-    # many accessors methods from it's Java peer
-    @in_cache = Hash.new # a hashtable of {(table,key) -> DLL(value_time, cached_time, value) }
-    @bufDLL = DoublyLinkedList.new # we use this as a LRU Doubly Linked List.
-    # The oldest are at the front and the newest are at the end
-    @in_cache.extend(MonitorMixin)
-    @bufDLL.extend(MonitorMixin)
-    #@bufPQ_commit_lock = @bufPQ.new_cond # to be used later
-    #@in_cache_commit_lock = @bufPQ.new_cond # to be used later
   end
+  
+  def read(read_time, table, key, max_age=nil, no_cache=false)
+    #type checking
+    raise TypeError, "read_time needs to be a TxClock" unless read_time.is_a?(TxClock)
+    raise TypeError, "table needs to be a string" unless table.is_a?(String)
+    raise TypeError, "key needs to be a string" unless  key.is_a?(String)
+    raise TypeError, "max_age needs to be a TxClock" unless (max_age.nil? or max_age.is_a?(TxClock))
+    raise TypeError, "no_cache needs to be a Boolean" unless (no_cache.is_a?(TrueClass) || no_cache.is_a?(FalseClass))
 
-  def write(condition_txclock, ops_map)
+    @cache_map.synchronize do
+        check_cache = get(read_time, table,key)
+        #check if the result is current enough to use
+        
+        if (not check_cache.nil?) and ( (read_time > check_cache.cached_time) and 
+          (check_cache.cached_time < (read_time + max_age)))
+          # we can use it!
+          return check_cache
+          
+        else # we cant use it - so ask the db for a result 
+          max_age = [max_age, @max_age] #TODO: add the 2 from the transaction read method here
+          read_from_db = @http_facade.read(read_time, table, key, max_age=max_age, no_cache=no_cache)
+          # we expected a (cached_time, value_time, value) from this
+          @cache_map.put(read_from_db.cached_time, read_from_db.value_time, read_from_db.value)
+        end
+      end
+        
+  end
+  
+  def write(condition_txclock, tx_view)
     raise TypeError, "Condition_Time needs to be a TxClock" unless (condition_txclock.nil? or condition_txclock.is_a?(TxClock))
-    op_list = ops_map.keys.map{|k| {"table"=>k[0], "key"=>k[1], "op"=>ops_map[k][0], "value"=>ops_map[k][1] } }
+    raise TypeError, "tx_view needs to be a TxView" unless (tx_view.is_a?(TxView))
     batch_write(op_list, condition_txclock = condition_txclock)
+    
   end
-
 
   def batch_write(op_list, unmodified_since = nil, transaction_id = nil, condition_txclock = nil)
     #type checking
-
     raise TypeError, "Condition_Time needs to be a TxClock" unless (condition_txclock.nil? or condition_txclock.is_a?(TxClock))
     raise TypeError, "Unmodified_since needs to be a DateTime" unless (unmodified_since.nil? or unmodified_since.is_a?(DateTime))
-
-    @in_cache.synchronize do
-      @bufDLL.synchronize do
-
-        json_body = op_list.to_json
-        params = Hash.new()
-        params['Content-Type'] =  'text/json'
-        if not unmodified_since.nil?
-          params['If-Unmodified-Since']= unmodified_since.strftime("%a, %e %B %Y %H:%M:%S  %Z")
-        end
-
-        if not transaction_id.nil?
-          params['Transaction:'] = "id=#{transaction_id}"
-        end
-
-        if not condition_txclock.nil?
-          params['Condition-TxClock'] = condition_txclock.to_str
-        end
-
-        @connection.PUT_Request(path, params, json_body)
-
-      end
-    end
-
+    @HTTPInterface.write(condition_txclock, tx_view)
   end
 
-  def read(read_time, table, key, max_age, no_cache)
-    #type checking
-    raise TypeError, "read_time needs to be a " unless read_time.is_a?(TxClock)
-    raise TypeError, "table needs to be a " unless table.is_a?(String)
-    raise TypeError, "key needs to be a " unless  key.is_a?(String)
-    raise TypeError, "max_age needs to be a " unless max_age.is_a?(Integer )
-    raise TypeError, "no_cache needs to be a " unless (no_cache.is_a?(TrueClass) || no_cache.is_a?(FalseClass))
-
-
-    @in_cache.synchronize do
-      @bufDLL.synchronize do
-
-        check_cache = get(read_time, table,key)
-        #check if the result is current enough to use
-        if(check_cache.nil? or ( (read_time < check_cache[1])  and (check_cache[1] < (read_time + max_age))))
-          read_from_db = @connection.GET_Request()
-          params = Hash.new()
-          max_age = [max_age, @max_age] #TODO: add the 2 from the transaction read method here
-          no_cache = true
-          params['Cache-Control:'] =  "max-age:#{max_age}, #{'no-cache' if no_cache}"
-          case read_from_db.code
-          when 200
-            put(read_from_db['Read-TxClock'], read_from_db['Value-TxClock'], table, key, read_from_db.body)
-          when 404
-            put(read_from_db['Read-TxClock'], read_from_db['Value-TxClock'], table, key, nil)
-          else
-            raise TypeError, 'Error: Wrong Status Code Returned'
-          end
-        end
-      end
-
-    end
-  end
-
-
-  #returns the most recent value if it exists, else returns nil
-  def get(read_time, table, key)
-    #type checking
-    raise TypeError, "read_time needs to be a " unless read_time.is_a?(TxClock)
-    raise TypeError, "table needs to be a " unless table.is_a?(String)
-    raise TypeError, "key needs to be a " unless  key.is_a?(String)
-
-    @in_cache.synchronize do
-      @bufDLL.synchronize do
-        bucket_entries = @in_cache[[table,key]]
-        return nil if (bucket_entries.nil? or bucket_entries.len.zero?)
-        bucket_entries.peek_tail()
-      end
-    end
-  end
-
-
-  # returns nil no matter what
-  def put(read_time, value_time, table, key, value)
-    #type checking
-    raise TypeError, "read_time needs to be a " unless read_time.is_a?(TxClock)
-    raise TypeError, 'The Value Time has to be a TxClock' unless value_time.is_a?(TxClock)
-    raise TypeError, "table needs to be a " unless table.is_a?(String)
-    raise TypeError, "key needs to be a " unless  key.is_a?(String)
-    raise TypeError, 'Value needs to be a supported return type included in ' +
-      CacheResult.supported_values unless CacheResult.supported_values.incude?(value)
-
-    @in_cache.synchronize do
-      @bufDLL.synchronize do
-        bucket_entries = @in_cache[[table,key]]
-        if bucket_entries.nil?
-          @in_cache[[table,key]] = DoublyLinkedList.new()
-          bucket_entries = @in_cache[[table,key]]
-        end
-
-        bucket_end = bucket_entries.peek_tail()
-        while bucket_end != nil
-          if bucket_end.value[0] == value_time
-            bucket_end.value[1] = [read_time, bucket_end.value[1]].max
-            return
-          end
-          bucket_end = bucket_end.prev_node
-        end
-
-        # else we need to add a new tuple
-        @in_cache[[table,key]].insert_tail [value_time, cached_time, value]
-      end
-    end
-  end
-
-  def get_op(op_string)
-    raise TypeError, 'Operation is not a valid operation' unless ['create','hold','update','delete'].include?(op_string)
-  end
 
 end

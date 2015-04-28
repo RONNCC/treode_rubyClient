@@ -1,5 +1,6 @@
 require_relative('./TxClock')
-require_relative(./StaleException)
+require_relative('./StaleException')
+
 class Transaction
   def initialize(cache, read_timestamp=TxClock.new((Time.now.to_f * 1000000).to_i), max_age =nil, no_cache=false)
     raise TypeError, 'Cache must be instance of Cache class' unless Cache.is_a?(Cache)

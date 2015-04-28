@@ -1,6 +1,6 @@
 class CacheResult
     attr_accessor :value_time, :cached_time, :value
-    supported_values = ['JSON'] #extend to xml later?
+    supported_values = ['JSON']
     
     def initialize(value_time,cached_time, value)
         

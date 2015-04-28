@@ -1,0 +1,79 @@
+
+  @cache_map.synchronize do
+
+        json_body = op_list.to_json
+        params = Hash.new()
+        params['Content-Type'] =  'text/json'
+        if not unmodified_since.nil?
+          params['If-Unmodified-Since']= unmodified_since.strftime("%a, %e %B %Y %H:%M:%S  %Z")
+        end
+
+        if not transaction_id.nil?
+          params['Transaction:'] = "id=#{transaction_id}"
+        end
+
+        if not condition_txclock.nil?
+          params['Condition-TxClock'] = condition_txclock.to_str
+        end
+
+        @connection.write(path, params, json_body)
+
+    end
+
+
+    when 200
+      put(read_from_db['Read-TxClock'], read_from_db['Value-TxClock'], table, key, read_from_db.body)
+    when 404
+      put(read_from_db['Read-TxClock'], read_from_db['Value-TxClock'], table, key, nil)
+    else
+      raise TypeError, 'Error: Wrong Status Code Returned'
+    end
+
+    op_list = ops_map.keys.map{|k| {"table"=>k[0], "key"=>k[1], "op"=>ops_map[k][0], "value"=>ops_map[k][1] } }
+
+
+  #returns the most recent value if it exists, else returns nil
+  def get(read_time, table, key)
+    #type checking
+    raise TypeError, "read_time needs to be a " unless read_time.is_a?(TxClock)
+    raise TypeError, "table needs to be a " unless table.is_a?(String)
+    raise TypeError, "key needs to be a " unless  key.is_a?(String)
+
+    @LRUCache.synchronize do
+        bucket_entries =@LRUCache.get([table,key])
+        return nil if (bucket_entries.nil? or bucket_entries.len.zero?)
+        bucket_entries.peek_tail()
+      end
+  end
+
+
+  # returns nil no matter what
+  def put(cached_time, value_time, table, key, value)
+    #type checking
+    raise TypeError, "cached_time needs to be a " unless cached_time.is_a?(TxClock)
+    raise TypeError, 'The Value Time has to be a TxClock' unless value_time.is_a?(TxClock)
+    raise TypeError, "table needs to be a " unless table.is_a?(String)
+    raise TypeError, "key needs to be a " unless  key.is_a?(String)
+    raise TypeError, 'Value needs to be a supported return type included in ' +
+      CacheResult.supported_values unless CacheResult.supported_values.include?(value)
+
+    @LRUCache.synchronize do
+        bucket_entries = @LRUCache.get([table,key])
+        if bucket_entries.nil?
+         @LRUCache.put([table,key])
+          bucket_entries = @in_cache[[table,key]]
+        end
+
+        bucket_end = bucket_entries.peek_tail()
+        while bucket_end != nil
+          if bucket_end.value[0] == value_time
+            bucket_end.value[1] = [cached_time, bucket_end.value[1]].max
+            return
+          end
+          bucket_end = bucket_end.prev_node
+        end
+
+        # else we need to add a new tuple
+        @in_cache[[table,key]].insert_tail [value_time, cached_time, value]
+      end
+  end
